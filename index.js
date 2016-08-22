@@ -6,7 +6,6 @@ exports = module.exports = opts => {
   const defaultOptions = {
     maxAge: 1000 * 60 * 60,
     prefix: 'afcsrf',
-    maxTokens: 10,
     redis: {
       host: '127.0.0.1',
       prot: 6379,
@@ -23,29 +22,17 @@ exports = module.exports = opts => {
 
     async set(csrfKey, secret, csrf) {
       const key = `${opts.prefix}:${csrfKey}`;
-      const result = await this.redis.multi()
-        .zadd(key, `${csrf}:${secret}`)
-        .zrange(key, 0, -1)
-        .exec();
-      if (result) {
-        const set = result[1][1];
-        if (set.length > opts.maxTokens) {
-          for (let i = 0, len = set.length - opts.maxTokens; i < len; i++) {
-            await this.redis.zrem(key, set[i]);
-          }
-        }
-        await this.redis.expire(key, opts.maxAge);
-        return true;
-      }
-      return false;
+      await this.redis.sadd(key, `${csrf}:${secret}`);
+      await this.redis.expire(key, opts.maxAge);
+      return true;
     }
 
     async verify(csrfKey, csrf) {
       const key = `${opts.prefix}:${csrfKey}`;
-      const set = await this.redis.zrange(key, 0, -1);
+      const set = await this.redis.smembers(key);
       const tiket = _.find(set, t => t.indexOf(`${csrf}:`) === 0);
       if (tiket) {
-        await this.redis.zrem(key, tiket);
+        await this.redis.srem(key, tiket);
         return true;
       }
       return false;
@@ -63,19 +50,29 @@ exports = module.exports = opts => {
        */
       let csrfKey = ctx.session._CSRFKEY;
       if (!csrfKey) {
-        csrfKey = ctx.session._CSRFKEY = uid.sync(24);
+        csrfKey = uid.sync(24);
+        ctx.session._CSRFKEY = csrfKey;
       }
       const secret = tokens.secretSync();
-      const csrf = tokens(secret);
+      const csrf = tokens.create(secret);
       const result = await store.set(csrfKey, secret, csrf);
       if (!result) throw new Error('Get csrf error!');
       return csrf;
     };
 
-    ctx.assertCSRF = ctx.assertCsrf = async (csrf) => {
+    ctx.assertCSRF = ctx.assertCsrf = async (body) => {
       const csrfKey = ctx.session._CSRFKEY;
       if (!csrfKey) {
         ctx.throw(403, 'secret is missing');
+        return false;
+      }
+      const csrf = (body && body._csrf)
+        || (ctx.query && ctx.query._csrf)
+        || (ctx.get('x-csrf-token'))
+        || (ctx.get('x-xsrf-token'))
+        || body;
+      if (!csrf) {
+        ctx.throw(403, 'token is missing');
         return false;
       }
       const result = await store.verify(csrfKey, csrf);
@@ -87,8 +84,20 @@ exports = module.exports = opts => {
     };
   };
 
+  const middleware = async (ctx, next) => {
+    if (ctx.method === 'GET'
+      || ctx.method === 'HEAD'
+      || ctx.method === 'OPTIONS') {
+      await next();
+      return;
+    }
+    if (await ctx.assertCSRF(ctx.request.body)) {
+      await next();
+    }
+  };
+
   return async (ctx, next) => {
     define(ctx);
-    await next();
+    await middleware(ctx, next);
   };
 };
