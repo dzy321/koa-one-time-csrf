@@ -18,6 +18,9 @@
     "koa",
     "csrf"
   ],
+  "publishConfig": {
+    "registry": "http://registry.npmjs.org/"
+  },
   "author": "wy",
   "license": "ISC",
   "bugs": {
