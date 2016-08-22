@@ -44,7 +44,7 @@ exports = module.exports = opts => {
   const store = new RedisStore();
 
   const define = ctx => {
-    ctx.getNewCsrf = async () => {
+    ctx.getCsrf = async () => {
       /**
        * generate token
        */
