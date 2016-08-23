@@ -18,7 +18,7 @@ test.before(t => {
   app.use(convert(session({
     domain: 'localhost',
     key: 'sessoinId',
-    maxAge: 1000 * 60 * 60,
+    maxAge: 1000 * 10,
   }, app)));
 
   app.use(require('../dist/index')());
@@ -64,3 +64,34 @@ test('post with csrf', async t => {
 });
 
 
+test('post with keep csrf', async t => {
+  const agent = chai.request.agent('http://localhost:8099');
+
+  const res = await agent.get('/api/csrf');
+
+  const csrf = res.text;
+
+  const word = (await agent.post('/api/verify').set({ 'x-csrf-token': csrf, 'x-csrf-token-keep': '1' })).text;
+
+  t.is(word, 'ok');
+
+  const word1 = (await agent.post('/api/verify').set({ 'x-csrf-token': csrf, 'x-csrf-token-keep': '1' })).text;
+
+  t.is(word1, 'ok');
+});
+
+function sleep(time) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve();
+    }, time);
+  });
+}
+
+test('expire csrf', async t=> {
+  const agent = chai.request.agent('http://localhost:8099');
+  const res = await agent.get('/api/csrf');
+  const csrf = res.text;
+  await sleep(10000);
+  t.throws(agent.post('/api/verify').send({ '_csrf': csrf }));
+});

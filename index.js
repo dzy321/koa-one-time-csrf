@@ -27,12 +27,16 @@ exports = module.exports = opts => {
       return true;
     }
 
-    async verify(csrfKey, csrf) {
+    async verify(csrfKey, csrf, bKeep) {
       const key = `${opts.prefix}:${csrfKey}`;
       const set = await this.redis.smembers(key);
       const tiket = _.find(set, t => t.indexOf(`${csrf}:`) === 0);
       if (tiket) {
-        await this.redis.srem(key, tiket);
+        if (bKeep) {
+          await this.redis.expire(key, opts.maxAge);
+        } else {
+          await this.redis.srem(key, tiket);
+        }
         return true;
       }
       return false;
@@ -76,7 +80,8 @@ exports = module.exports = opts => {
         this.throw(403, 'token is missing');
         return false;
       }
-      const result = await store.verify(csrfKey, csrf);
+      const bKeep = !!this.get('x-csrf-token-keep');
+      const result = await store.verify(csrfKey, csrf, bKeep);
       if (!result) {
         this.throw(403, 'invalid csrf token');
         return false;
