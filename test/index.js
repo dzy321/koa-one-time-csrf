@@ -4,21 +4,22 @@ const router = require('koa-router')();
 const chai = require('chai');
 chai.use(require('chai-http'));
 const bodyParser = require('koa-bodyparser');
+const session = require('koa-session');
+const convert = require('koa-convert');
 
 test.before(t => {
 
-  const csrfKey = 'csrfkey' + new Date().getTime();
   const app = new Koa();
 
   app.use(bodyParser());
 
-  app.use(async (ctx, next) => {
-    //mock session
-    ctx.session = {
-      _CSRFKEY: csrfKey,
-    };
-    await next();
-  });
+  app.keys = ['terminus herd wtf'];
+
+  app.use(convert(session({
+    domain: 'localhost',
+    key: 'sessoinId',
+    maxAge: 1000 * 60 * 60,
+  }, app)));
 
   app.use(require('../dist/index')());
 
@@ -27,7 +28,7 @@ test.before(t => {
   });
 
   router.get('/api/csrf', async ctx => {
-    ctx.body = await ctx.getNewCsrf();
+    ctx.body = await ctx.getCsrf();
   });
 
   router.post('/api/verify', async ctx => {
@@ -41,6 +42,7 @@ test.before(t => {
   });
 });
 
+
 test('http test', async t => {
   const agent = chai.request.agent('http://localhost:8099');
   const word = (await agent.get('/api/test')).text;
@@ -50,7 +52,9 @@ test('http test', async t => {
 test('post with csrf', async t => {
   const agent = chai.request.agent('http://localhost:8099');
 
-  const csrf = (await agent.get('/api/csrf')).text;
+  const res = await agent.get('/api/csrf');
+
+  const csrf = res.text;
 
   const word = (await agent.post('/api/verify').set({ 'x-csrf-token': csrf })).text;
 

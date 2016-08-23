@@ -44,14 +44,15 @@ exports = module.exports = opts => {
   const store = new RedisStore();
 
   const define = ctx => {
-    ctx.getCsrf = async () => {
+
+    ctx.getCsrf = async function () {
       /**
        * generate token
        */
-      let csrfKey = ctx.session._CSRFKEY;
+      let csrfKey = this.session.CSRFKEY;
       if (!csrfKey) {
         csrfKey = uid.sync(24);
-        ctx.session._CSRFKEY = csrfKey;
+        this.session.CSRFKEY = csrfKey;
       }
       const secret = tokens.secretSync();
       const csrf = tokens.create(secret);
@@ -60,24 +61,24 @@ exports = module.exports = opts => {
       return csrf;
     };
 
-    ctx.assertCSRF = ctx.assertCsrf = async (body) => {
-      const csrfKey = ctx.session._CSRFKEY;
+    ctx.assertCSRF = ctx.assertCsrf = async function (body) {
+      const csrfKey = this.session.CSRFKEY;
       if (!csrfKey) {
-        ctx.throw(403, 'secret is missing');
+        this.throw(403, 'secret is missing');
         return false;
       }
       const csrf = (body && body._csrf)
-        || (ctx.query && ctx.query._csrf)
-        || (ctx.get('x-csrf-token'))
-        || (ctx.get('x-xsrf-token'))
+        || (this.query && this.query._csrf)
+        || (this.get('x-csrf-token'))
+        || (this.get('x-xsrf-token'))
         || body;
       if (!csrf) {
-        ctx.throw(403, 'token is missing');
+        this.throw(403, 'token is missing');
         return false;
       }
       const result = await store.verify(csrfKey, csrf);
       if (!result) {
-        ctx.throw(403, 'invalid csrf token');
+        this.throw(403, 'invalid csrf token');
         return false;
       }
       return true;
